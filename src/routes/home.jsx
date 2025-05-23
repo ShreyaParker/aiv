@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+
 import { Button } from "@/components/ui/button.jsx";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card.jsx";
@@ -27,7 +27,7 @@ const HomePage = () => {
                     variant="default"
                     className="flex items-center gap-2 px-8 py-3 text-lg font-semibold bg-black text-white hover:bg-gray-800"
                 >
-                    Generate <Sparkles className="w-5 h-5" />
+                    Go to Dashboard
                 </Button>
             </Link>
         </div>

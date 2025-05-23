@@ -18,6 +18,16 @@ html, body, #root {
     --foreground: black;  /* keep black text */
   }
 }
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
 
 body {
   background-color: var(--background, white);
