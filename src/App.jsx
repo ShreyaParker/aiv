@@ -43,6 +43,7 @@ const App = () => {
                         element={<MockInterviewPage />}
                     />
                     <Route path="feedback/:interviewId" element={<Feedback />} />
+
                 </Route>
             </Routes>
         </Router>

@@ -3,9 +3,13 @@ import Header from "@/components/header.jsx";
 
 export const Generate = () => {
   return (
-    <div className="flex-col md:px-12">
-        <Header/>
-      <Outlet />
-    </div>
+      <div>
+          <Header/>
+          <div className="flex-col md:px-12">
+
+              <Outlet/>
+          </div>
+      </div>
+
   );
 };

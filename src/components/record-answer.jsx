@@ -4,17 +4,17 @@ import {
     Loader,
     Mic,
     RefreshCw,
-
     Video,
     VideoOff,
     WebcamIcon,
-    Trash2, SaveIcon,
+    Trash2,
+    SaveIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import useSpeechToText from "react-hook-speech-to-text";
 import { useParams } from "react-router-dom";
 import WebCam from "react-webcam";
-import { toast } from "sonner";
+import { toast } from "sonner"; // <-- import Toaster here
 import { chatSession } from "@/scripts";
 import {
     addDoc,
@@ -27,17 +27,14 @@ import {
     doc,
 } from "firebase/firestore";
 import { db } from "@/config/firebase.config";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog.jsx";
 import { Button } from "@/components/ui/button.jsx";
 
-export const RecordAnswer = ({ question, isWebCam, setIsWebCam, onAnswerSaved }) => {
+export const RecordAnswer = ({
+                                 question,
+                                 isWebCam,
+                                 setIsWebCam,
+                                 onAnswerSaved,
+                             }) => {
     const {
         interimResult,
         isRecording,
@@ -52,7 +49,6 @@ export const RecordAnswer = ({ question, isWebCam, setIsWebCam, onAnswerSaved })
     const [userAnswer, setUserAnswer] = useState("");
     const [isAiGenerating, setIsAiGenerating] = useState(false);
     const [aiResult, setAiResult] = useState(null);
-    const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [hasAnswer, setHasAnswer] = useState(false);
     const [existingAnswerId, setExistingAnswerId] = useState(null);
@@ -73,12 +69,13 @@ export const RecordAnswer = ({ question, isWebCam, setIsWebCam, onAnswerSaved })
 
             const snap = await getDocs(q);
             if (!snap.empty) {
+                const docData = snap.docs[0].data();
                 setHasAnswer(true);
                 setExistingAnswerId(snap.docs[0].id);
-                setUserAnswer(snap.docs[0].data().user_ans || "");
+                setUserAnswer(docData.user_ans || "");
                 setAiResult({
-                    feedback: snap.docs[0].data().feedback,
-                    ratings: snap.docs[0].data().rating,
+                    feedback: docData.feedback,
+                    ratings: docData.rating,
                 });
             } else {
                 setHasAnswer(false);
@@ -93,17 +90,24 @@ export const RecordAnswer = ({ question, isWebCam, setIsWebCam, onAnswerSaved })
 
     const cleanUpUserAnswer = async (rawAnswer) => {
         const prompt = `
-You are given the following question and a user answer that might contain errors due to speech recognition mishearing.
+You are given a technical question and a transcript of a spoken answer. The transcript may contain:
+
+- Misheard technical terms (e.g., "mon" instead of "MERN", "stek" instead of "stack")
+- Minor grammar or punctuation issues due to speech recognition
+- Slight repetition or filler words
+
+Your task:
+- Fix **misheard technical terms** using the context of the question
+- Fix **grammar and punctuation** to make the answer understandable
+- **Do not rephrase** or improve the answer beyond fixing misrecognitions and basic grammar
+
+Return only the cleaned-up answer. Do NOT include notes, explanations, or formatting.
 
 Question: "${question.question}"
+Transcript: "${rawAnswer}"
+Cleaned Answer:
+   `.trim();
 
-Please carefully improve the grammar, punctuation, and clarity of the user's answer without changing its meaning.
-
-Additionally, detect any difficult or technical terms that may have been misheard or transcribed incorrectly by speech recognition. Correct these terms based on the context of both the question and the answer.
-
-Return ONLY the cleaned-up and corrected answer text. Do NOT add any explanations, notes, or commentary.
-Answer: "${rawAnswer}"
-`;
         try {
             const aiResponse = await chatSession.sendMessage(prompt);
             return aiResponse.response.text().trim();
@@ -113,32 +117,41 @@ Answer: "${rawAnswer}"
         }
     };
 
-    const recordUserAnswer = async () => {
-        if (hasAnswer) {
-            toast.info("You have already answered this question. Delete the existing answer to record again.");
-            return;
-        }
+    useEffect(() => {
+        const processTranscript = async () => {
+            const rawTranscript = results
+                .filter((result) => typeof result !== "string")
+                .map((result) => result.transcript)
+                .join(" ");
 
-        if (isRecording) {
-            stopSpeechToText();
-
-            if (userAnswer?.length < 30) {
-                toast.error("Error: Your answer should be more than 30 characters");
-                return;
+            if (rawTranscript.length > 0) {
+                const cleaned = await cleanUpUserAnswer(rawTranscript);
+                setUserAnswer(cleaned);
             }
+        };
 
-            const cleanedAnswer = await cleanUpUserAnswer(userAnswer);
-            setUserAnswer(cleanedAnswer);
+        processTranscript();
+    }, [results]);
 
-            const aiRes = await generateResult(
-                question.question,
-                question.answer,
-                cleanedAnswer
-            );
+    const generateResult = async (qst, qstAns, userAns) => {
+        setIsAiGenerating(true);
+        const prompt = `
+Question: "${qst}"
+User Answer: "${userAns}"
+Correct Answer: "${qstAns}"
+Please compare the user's answer to the correct answer, and provide a rating (from 1 to 10) based on answer quality, and offer feedback for improvement.
+Return the result in JSON format with the fields "ratings" (number) and "feedback" (string).
+       `.trim();
 
-            setAiResult(aiRes);
-        } else {
-            startSpeechToText();
+        try {
+            const aiResult = await chatSession.sendMessage(prompt);
+            return cleanJsonResponse(aiResult.response.text());
+        } catch (error) {
+            console.error("Error generating AI result:", error);
+            toast.error("An error occurred while generating feedback.");
+            return { ratings: 0, feedback: "Unable to generate feedback" };
+        } finally {
+            setIsAiGenerating(false);
         }
     };
 
@@ -153,26 +166,31 @@ Answer: "${rawAnswer}"
         }
     };
 
-    const generateResult = async (qst, qstAns, userAns) => {
-        setIsAiGenerating(true);
-        const prompt = `
-      Question: "${qst}"
-      User Answer: "${userAns}"
-      Correct Answer: "${qstAns}"
-      Please compare the user's answer to the correct answer, and provide a rating (from 1 to 10) based on answer quality, and offer feedback for improvement.
-      Return the result in JSON format with the fields "ratings" (number) and "feedback" (string).
-    `;
+    const recordUserAnswer = async () => {
+        if (hasAnswer) {
+            toast.info(
+                "You have already answered this question. Delete the existing answer to record again."
+            );
+            return;
+        }
 
-        try {
-            const aiResult = await chatSession.sendMessage(prompt);
-            const parsedResult = cleanJsonResponse(aiResult.response.text());
-            return parsedResult;
-        } catch (error) {
-            console.log(error);
-            toast.error("An error occurred while generating feedback.");
-            return { ratings: 0, feedback: "Unable to generate feedback" };
-        } finally {
-            setIsAiGenerating(false);
+        if (isRecording) {
+            stopSpeechToText();
+
+            if (userAnswer?.length < 30) {
+                toast.error("Error: Your answer should be more than 30 characters.");
+                return;
+            }
+
+            const aiRes = await generateResult(
+                question.question,
+                question.answer,
+                userAnswer
+            );
+
+            setAiResult(aiRes);
+        } else {
+            startSpeechToText();
         }
     };
 
@@ -181,50 +199,70 @@ Answer: "${rawAnswer}"
             toast.info("Delete the existing answer before recording again.");
             return;
         }
+
+        stopSpeechToText(); // Stop any ongoing recording
+
+        // Reset all states before recording again
         setUserAnswer("");
-        stopSpeechToText();
+        setAiResult(null);
+        setLoading(false);
+        setIsAiGenerating(false);
+        results.length = 0; // Clear previous speech-to-text results if needed
+
+        // Start fresh recording
         startSpeechToText();
     };
 
+
     const saveUserAnswer = async () => {
         if (hasAnswer) {
-            toast.info("You have already answered this question. Delete it to save a new answer.");
+            toast.info(
+                "You have already answered this question. Delete it to save a new answer."
+            );
             return;
         }
-
-        setLoading(true);
 
         if (!aiResult) {
-            toast.error("Please record your answer and generate feedback before saving.");
-            setLoading(false);
+            toast.error(
+                "Please record your answer and generate feedback before saving."
+            );
             return;
         }
 
-        try {
-            await addDoc(collection(db, "userAnswers"), {
-                mockIdRef: interviewId,
-                question: question.question,
-                correct_ans: question.answer,
-                user_ans: userAnswer,
-                feedback: aiResult.feedback,
-                rating: aiResult.ratings,
-                userId,
-                createdAt: serverTimestamp(),
-            });
-
-            toast.success("Your answer has been saved.");
-            setHasAnswer(true);
-            setOpen(false);
-
-            if (onAnswerSaved) {
-                onAnswerSaved(question.question);
+        // Confirm save with toast
+        toast(
+            "Confirm Save?",
+            {
+                description: "Click 'Save' below to confirm.",
+                action: {
+                    label: "Save",
+                    onClick: async () => {
+                        setLoading(true);
+                        try {
+                            const docRef = await addDoc(collection(db, "userAnswers"), {
+                                mockIdRef: interviewId,
+                                question: question.question,
+                                correct_ans: question.answer,
+                                user_ans: userAnswer,
+                                feedback: aiResult.feedback,
+                                rating: aiResult.ratings,
+                                userId,
+                                createdAt: serverTimestamp(),
+                            });
+                            toast.success("Your answer has been saved.");
+                            setHasAnswer(true);
+                            setExistingAnswerId(docRef.id);
+                            if (onAnswerSaved) onAnswerSaved(question.question);
+                        } catch (error) {
+                            toast.error("An error occurred while saving your answer.");
+                            console.error("Save error:", error);
+                        } finally {
+                            setLoading(false);
+                        }
+                    },
+                },
             }
-        } catch (error) {
-            toast.error("An error occurred while saving your answer.");
-            console.log(error);
-        } finally {
-            setLoading(false);
-        }
+        );
     };
 
     const deleteAnswer = async () => {
@@ -234,126 +272,84 @@ Answer: "${rawAnswer}"
         }
 
         try {
+            stopSpeechToText();
+
             await deleteDoc(doc(db, "userAnswers", existingAnswerId));
             toast.success("Answer deleted. You can now record a new answer.");
+
 
             setHasAnswer(false);
             setExistingAnswerId(null);
             setUserAnswer("");
             setAiResult(null);
+            setLoading(false);
+            setIsAiGenerating(false);
+
+
+            if (Array.isArray(results)) {
+                results.length = 0;
+            }
+
         } catch (error) {
             toast.error("Failed to delete the answer. Try again later.");
-            console.log(error);
+            console.error("Delete error:", error);
         }
     };
 
-    useEffect(() => {
-        const combineTranscripts = results
-            .filter((result) => typeof result !== "string")
-            .map((result) => result.transcript)
-            .join(" ");
-
-        setUserAnswer(combineTranscripts);
-    }, [results]);
 
     return (
-        <div className="w-full flex flex-col items-center gap-8 mt-4">
-            <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent className="sm:max-w-md z-50">
-                    <DialogHeader>
-                        <DialogTitle>Save Your Answer</DialogTitle>
-                        <DialogDescription>
-                            Are you sure you want to save your answer? Once saved, you won't be able to modify it.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-                        <Button onClick={saveUserAnswer} disabled={loading}>
-                            {loading ? "Saving..." : "Confirm"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+        <div className="w-full flex flex-col items-center gap-8 mt-4 relative">
 
-            {open && (
-                <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center">
-                    <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md z-[10000]">
-                        <h2 className="text-lg font-semibold">Save Your Answer</h2>
-                        <p className="text-sm text-gray-700 mt-2 mb-4">
-                            Are you sure you want to save your answer? Once saved, it cannot be changed.
-                        </p>
-                        <div className="flex justify-end gap-3">
-                            <button
-                                className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
-                                onClick={() => setOpen(false)}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                                onClick={saveUserAnswer}
-                                disabled={loading}
-                            >
-                                {loading ? "Saving..." : "Confirm"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <div className="w-full h-[400px] md:w-96 flex flex-col items-center justify-center border p-4 bg-gray-50 rounded-md">
+            <div className="relative w-full h-[400px] md:w-96 border p-2 bg-gray-50 rounded-md overflow-hidden z-10">
                 {isWebCam ? (
-                    <WebCam
-                        onUserMedia={() => setIsWebCam(true)}
-                        onUserMediaError={() => setIsWebCam(false)}
-                        className="w-full h-full object-cover rounded-md"
-                        style={{ zIndex: 0, position: "relative" }}
-                    />
+                    <div className="absolute inset-0 z-10">
+                        <WebCam
+                            onUserMedia={() => setIsWebCam(true)}
+                            onUserMediaError={() => setIsWebCam(false)}
+                            className="w-full h-full object-cover rounded-md"
+                            videoConstraints={{
+                                facingMode: "user",
+                            }}
+                        />
+                    </div>
                 ) : (
-                    <WebcamIcon className="min-w-24 min-h-24 text-muted-foreground" />
+                    <div className="w-full h-full flex items-center justify-center">
+                        <WebcamIcon className="w-24 h-24 text-muted-foreground" />
+                    </div>
                 )}
             </div>
 
             {hasAnswer && (
-                <div className="w-full max-w-md bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded relative">
-                    <strong>Note:</strong> You have already recorded an answer for this question.
-                    To record again, please delete the existing answer below.
+                <div className="w-full max-w-md bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded relative z-20">
+                    <strong>Note:</strong> You have already recorded an answer for this
+                    question. To record again, please delete the existing answer below.
                 </div>
             )}
 
-            <div className="flex justify-center gap-3">
-                <Button
-                    variant="outline"
-                    onClick={() => setIsWebCam(!isWebCam)}
-                    size="sm"
-                >
+            <div className="flex justify-center gap-3 z-20">
+                <Button variant="outline" onClick={() => setIsWebCam(!isWebCam)} size="sm">
                     {isWebCam ? <VideoOff /> : <Video />}
                 </Button>
 
                 {!hasAnswer && (
                     <>
-                        <Button
-                            variant="outline"
-                            onClick={recordUserAnswer}
-                            size="sm"
-                        >
+                        <Button variant="outline" onClick={recordUserAnswer} size="sm">
                             {isRecording ? <CircleStop /> : <Mic />}
                         </Button>
-                        <Button
-                            variant="outline"
-                            onClick={recordNewAnswer}
-                            size="sm"
-                        >
+                        <Button variant="outline" onClick={recordNewAnswer} size="sm">
                             <RefreshCw />
                         </Button>
                         <Button
                             variant="outline"
-                            onClick={() => setOpen(true)}
-                            disabled={!aiResult}
+                            onClick={saveUserAnswer}
+                            disabled={!aiResult || loading}
                             size="sm"
-
                         >
-                            {isAiGenerating ? <Loader className="animate-spin" /> : <SaveIcon />}
+                            {isAiGenerating || loading ? (
+                                <Loader className="animate-spin" />
+                            ) : (
+                                <SaveIcon />
+                            )}
                         </Button>
                     </>
                 )}
@@ -371,7 +367,7 @@ Answer: "${rawAnswer}"
                 )}
             </div>
 
-            <div className="w-full mt-4 p-4 border rounded-md bg-gray-50">
+            <div className="w-full mt-4 p-4 border rounded-md bg-gray-50 z-20">
                 <h2 className="text-lg font-semibold">Your Answer:</h2>
                 <p className="text-sm mt-2 text-gray-700 whitespace-normal">
                     {userAnswer || "Start recording to see your answer here"}

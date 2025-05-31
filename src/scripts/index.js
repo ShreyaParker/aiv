@@ -43,7 +43,21 @@ const safetySettings = [
   },
 ];
 
-export const chatSession = model.startChat({
+const chatSession = model.startChat({
   generationConfig,
   safetySettings,
 });
+
+export { chatSession };
+
+
+export async function askGemini(prompt) {
+  try {
+    const result = await chatSession.sendMessage(prompt);
+    const response = await result.response.text();
+    return response.trim();
+  } catch (err) {
+    console.error("Gemini error:", err);
+    throw err;
+  }
+}
