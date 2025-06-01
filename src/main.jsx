@@ -5,7 +5,7 @@ import { ClerkProvider } from "@clerk/clerk-react";
 
 import "./index.css";
 import App from "./App.jsx";
-import { ToasterProvider } from "./provider/toast-provider.jsx";
+import { ToastProvider } from "./provider/toast-provider.jsx";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -14,12 +14,14 @@ if (!PUBLISHABLE_KEY) {
 }
 
 const rootElement = document.getElementById("root");
+
 if (rootElement) {
     createRoot(rootElement).render(
         <StrictMode>
             <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
-                <App />
-                <ToasterProvider />
+                <ToastProvider>
+                    <App />
+                </ToastProvider>
             </ClerkProvider>
         </StrictMode>
     );

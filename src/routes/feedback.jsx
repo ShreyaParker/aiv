@@ -20,7 +20,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion.jsx";
-import { cn } from "@/lib/utils";
 import { CircleCheck, Star } from "lucide-react";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card.jsx";
 
@@ -29,7 +28,6 @@ export const Feedback = () => {
   const [interview, setInterview] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [feedbacks, setFeedbacks] = useState([]);
-  const [activeFeed, setActiveFeed] = useState("");
   const { userId } = useAuth();
   const navigate = useNavigate();
 
@@ -95,101 +93,117 @@ export const Feedback = () => {
     return (totalRatings / feedbacks.length).toFixed(1);
   }, [feedbacks]);
 
+  const feedbackBySection = useMemo(() => {
+    if (!interview || !interview.sections || feedbacks.length === 0) return [];
+
+    return interview.sections.map((section) => {
+      const sectionFeedbacks = feedbacks.filter((fb) =>
+          section.questions.some((q) => q.question === fb.question)
+      );
+
+      return {
+        ...section,
+        feedbacks: sectionFeedbacks,
+      };
+    });
+  }, [interview, feedbacks]);
+
   if (isLoading) {
     return <LoaderPage className="w-full h-[70vh]" />;
   }
 
   return (
       <div className="flex flex-col w-full gap-8 py-8 max-w-5xl mx-auto px-4">
-
         <header className="space-y-2">
-          <h1 className="text-3xl font-extrabold text-gray-900">
-            Congratulations!
-          </h1>
+          <h1 className="text-3xl font-extrabold text-gray-900">Congratulations!</h1>
           <p className="text-gray-600 max-w-xl">
             Your personalized feedback is now available. Dive in to see your strengths, areas for improvement, and tips to help you ace your next interview.
           </p>
 
           <p className="mt-4 text-lg text-gray-700">
             Your overall interview rating:{" "}
-            <span className="text-emerald-600 font-semibold text-2xl">
-            {overAllRating} / 10
-          </span>
+            <span className="text-emerald-600 font-semibold text-2xl">{overAllRating} / 10</span>
           </p>
         </header>
 
-
-        {interview && <InterviewPin interview={interview} onMockPage />}
-
+         {interview && (
+            <InterviewPin
+                interview={interview}
+                feedbackBySection={feedbackBySection}
+                onMockPage
+            />
+        )}
 
         <h2 className="text-2xl font-semibold mt-8 mb-4 text-gray-900">
-          Interview Feedback
+          Interview Feedback by Section
         </h2>
 
+        {feedbackBySection.length > 0 ? (
+            <div className="space-y-10">
+              {feedbackBySection.map((section) => (
+                  <section key={section.type}>
+                    <h3 className="text-xl font-bold mb-4">{section.type} Section</h3>
 
-        {feedbacks.length > 0 ? (
-            <Accordion type="single" collapsible className="space-y-6">
-              {feedbacks.map((feed) => (
-                  <AccordionItem
-                      key={feed.id}
-                      value={feed.id}
-                      className="border rounded-lg shadow-md"
-                  >
-                    <AccordionTrigger
-                        onClick={() => setActiveFeed(feed.id)}
-                        className={cn(
-                            "px-5 py-3 flex items-center justify-between text-base rounded-t-lg transition-colors hover:no-underline",
-                            activeFeed === feed.id
-                                ? "bg-gradient-to-r from-purple-50 to-blue-50"
-                                : "hover:bg-gray-50"
-                        )}
-                    >
-                      <span>{feed.question}</span>
-                    </AccordionTrigger>
 
-                    <AccordionContent className="px-5 py-6 bg-white rounded-b-lg space-y-6 shadow-inner">
-                      <div className="text-lg font-semibold text-gray-700 flex items-center gap-2">
-                        <Star className="text-yellow-400" />
-                        Rating: {feed.rating}
-                      </div>
+                    {section.feedbacks.length > 0 ? (
+                        <Accordion type="single" collapsible className="space-y-6">
+                          {section.feedbacks.map((feed) => (
+                              <AccordionItem
+                                  key={feed.id}
+                                  value={feed.id}
+                                  className="border rounded-lg shadow-md"
+                              >
+                                <AccordionTrigger className="px-5 py-3 flex items-center justify-between text-base rounded-t-lg transition-colors hover:no-underline">
+                                  <span>{feed.question}</span>
+                                </AccordionTrigger>
 
-                      <Card className="border-none bg-green-50 rounded-lg shadow-md p-5 space-y-3">
-                        <CardTitle className="flex items-center text-lg text-green-700">
-                          <CircleCheck className="mr-2" />
-                          Expected Answer
-                        </CardTitle>
-                        <CardDescription className="font-medium text-gray-700">
-                          {feed.correct_ans}
-                        </CardDescription>
-                      </Card>
+                                <AccordionContent className="px-5 py-6 bg-white rounded-b-lg space-y-6 shadow-inner">
+                                  <div className="text-lg font-semibold text-gray-700 flex items-center gap-2">
+                                    <Star className="text-yellow-400" />
+                                    Rating: {feed.rating}
+                                  </div>
 
-                      <Card className="border-none bg-yellow-50 rounded-lg shadow-md p-5 space-y-3">
-                        <CardTitle className="flex items-center text-lg text-yellow-700">
-                          <CircleCheck className="mr-2" />
-                          Your Answer
-                        </CardTitle>
-                        <CardDescription className="font-medium text-gray-700">
-                          {feed.user_ans}
-                        </CardDescription>
-                      </Card>
+                                  <Card className="border-none bg-green-50 rounded-lg shadow-md p-5 space-y-3">
+                                    <CardTitle className="flex items-center text-lg text-green-700">
+                                      <CircleCheck className="mr-2" />
+                                      Expected Answer
+                                    </CardTitle>
+                                    <CardDescription className="font-medium text-gray-700">
+                                      {feed.correct_ans}
+                                    </CardDescription>
+                                  </Card>
 
-                      <Card className="border-none bg-red-50 rounded-lg shadow-md p-5 space-y-3">
-                        <CardTitle className="flex items-center text-lg text-red-700">
-                          <CircleCheck className="mr-2" />
-                          Feedback
-                        </CardTitle>
-                        <CardDescription className="font-medium text-gray-700">
-                          {feed.feedback}
-                        </CardDescription>
-                      </Card>
-                    </AccordionContent>
-                  </AccordionItem>
+                                  <Card className="border-none bg-yellow-50 rounded-lg shadow-md p-5 space-y-3">
+                                    <CardTitle className="flex items-center text-lg text-yellow-700">
+                                      <CircleCheck className="mr-2" />
+                                      Your Answer
+                                    </CardTitle>
+                                    <CardDescription className="font-medium text-gray-700">
+                                      {feed.user_ans}
+                                    </CardDescription>
+                                  </Card>
+
+                                  <Card className="border-none bg-red-50 rounded-lg shadow-md p-5 space-y-3">
+                                    <CardTitle className="flex items-center text-lg text-red-700">
+                                      <CircleCheck className="mr-2" />
+                                      Feedback
+                                    </CardTitle>
+                                    <CardDescription className="font-medium text-gray-700">
+                                      {feed.feedback}
+                                    </CardDescription>
+                                  </Card>
+                                </AccordionContent>
+                              </AccordionItem>
+                          ))}
+                        </Accordion>
+                    ) : (
+                        <p className="text-gray-500 italic">No feedback available for this section.</p>
+                    )}
+                  </section>
               ))}
-            </Accordion>
+            </div>
         ) : (
-            <p className="text-center text-gray-500 mt-12">
-              No feedback available yet.
-            </p>
+            <p className="text-center text-gray-500 mt-12">No feedback available yet.</p>
         )}
       </div>
   );

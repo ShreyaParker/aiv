@@ -1,26 +1,15 @@
+import { Toaster } from "sonner";
 
-export const ToasterProvider = () => {
+export const ToastProvider = ({ children }) => {
     return (
-        <Toaster
-            theme="light"
-            richColors
-            position="top-right"
-            className="bg-neutral-100 shadow-lg"
-        />
-    );
-};
-// src/components/ToastProvider.tsx
-
-import { Toaster } from 'sonner';
-
-const ToastProvider = ({ children }) => {
-    return (
-        <div>
-            {/* Toast Provider */}
-            <Toaster />
+        <>
+            <Toaster
+                theme="light"
+                richColors
+                position="top-right"
+                className="bg-neutral-100 shadow-lg"
+            />
             {children}
-        </div>
+        </>
     );
 };
-
-export default ToastProvider;

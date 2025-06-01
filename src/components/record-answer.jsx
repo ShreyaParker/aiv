@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button.jsx";
 export const RecordAnswer = ({
                                  question,
                                  isWebCam,
+                                 section,
                                  setIsWebCam,
                                  onAnswerSaved,
                              }) => {
@@ -133,15 +134,19 @@ Cleaned Answer:
         processTranscript();
     }, [results]);
 
-    const generateResult = async (qst, qstAns, userAns) => {
+    const generateResult = async (qst, qstAns, userAns, section) => {
         setIsAiGenerating(true);
+
         const prompt = `
+You are an expert interviewer providing feedback for a mock interview answer. The interview section is "${section}".
+
 Question: "${qst}"
 User Answer: "${userAns}"
 Correct Answer: "${qstAns}"
-Please compare the user's answer to the correct answer, and provide a rating (from 1 to 10) based on answer quality, and offer feedback for improvement.
+
+Please compare the user's answer to the correct answer, provide a rating (from 1 to 10) based on answer quality, and offer detailed feedback tailored for the "${section}" section. 
 Return the result in JSON format with the fields "ratings" (number) and "feedback" (string).
-       `.trim();
+  `.trim();
 
         try {
             const aiResult = await chatSession.sendMessage(prompt);
@@ -185,7 +190,8 @@ Return the result in JSON format with the fields "ratings" (number) and "feedbac
             const aiRes = await generateResult(
                 question.question,
                 question.answer,
-                userAnswer
+                userAnswer,
+            section
             );
 
             setAiResult(aiRes);
@@ -200,17 +206,16 @@ Return the result in JSON format with the fields "ratings" (number) and "feedbac
             return;
         }
 
-        stopSpeechToText(); // Stop any ongoing recording
+        stopSpeechToText();
 
-        // Reset all states before recording again
+
         setUserAnswer("");
         setAiResult(null);
         setLoading(false);
         setIsAiGenerating(false);
-        results.length = 0; // Clear previous speech-to-text results if needed
+        results.length = 0;
 
-        // Start fresh recording
-        startSpeechToText();
+        startSpeechToText()
     };
 
 
@@ -241,6 +246,7 @@ Return the result in JSON format with the fields "ratings" (number) and "feedbac
                         try {
                             const docRef = await addDoc(collection(db, "userAnswers"), {
                                 mockIdRef: interviewId,
+                                section,
                                 question: question.question,
                                 correct_ans: question.answer,
                                 user_ans: userAnswer,

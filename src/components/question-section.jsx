@@ -9,7 +9,8 @@ import { RecordAnswer } from "@/components/record-answer.jsx";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 
-const QuestionSection = ({ questions, onAnswerSaved, interviewId }) => {
+
+const QuestionSection = ({ questions, onAnswerSaved, interviewId,sectionType }) => {
   const { userId } = useAuth();
   const navigate = useNavigate();
 
@@ -75,7 +76,12 @@ const QuestionSection = ({ questions, onAnswerSaved, interviewId }) => {
     if (onAnswerSaved) onAnswerSaved(questionText);
   };
 
-  const allAnswered = answeredQuestions.length === questions.length;
+  // FIX: Check answered only for this section's questions
+  const sectionQuestionsNormalized = questions.map(q => q.question.trim().toLowerCase());
+  const answeredInSection = answeredQuestions.filter(aq =>
+      sectionQuestionsNormalized.includes(aq)
+  );
+  const allAnswered = answeredInSection.length === questions.length;
 
   return (
       <div className="w-full min-h-96 border rounded-md p-4">
@@ -130,6 +136,7 @@ const QuestionSection = ({ questions, onAnswerSaved, interviewId }) => {
                     interviewId={interviewId}
                     isWebCam={isWebCam}
                     setIsWebCam={setIsWebCam}
+                    section={sectionType}
                 />
               </TabsContent>
           ))}
@@ -137,7 +144,7 @@ const QuestionSection = ({ questions, onAnswerSaved, interviewId }) => {
           <TabsContent value="done">
             {allAnswered ? (
                 <div className="text-center space-y-4">
-                  <p className="text-green-700 font-medium">🎉 You've answered all questions!</p>
+                  <p className="text-green-700 font-medium">🎉 You've answered all questions in this section!</p>
                   <Button onClick={() => navigate(`/generate/feedback/${interviewId}`)}>
                     Check Your Feedback Now
                   </Button>

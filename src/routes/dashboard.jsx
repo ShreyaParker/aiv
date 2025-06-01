@@ -22,6 +22,8 @@ export const Dashboard = () => {
     const [loading, setLoading] = useState(false);
     const { userId } = useAuth();
     const [answeredMap, setAnsweredMap] = useState({});
+    const [feedbackByInterview, setFeedbackByInterview] = useState({});
+
 
     useEffect(() => {
         if (!userId) return;
@@ -39,11 +41,12 @@ export const Dashboard = () => {
                     id: doc.id,
                     ...doc.data(),
                 }));
+                console.log("Interviews fetched:", interviewList);
                 setInterviews(interviewList);
                 setLoading(false);
             },
             (error) => {
-                console.log("Error on fetching: ", error);
+                console.log("Error fetching interviews: ", error);
                 toast.error("Error..", {
                     description: "Something went wrong.. Try again later..",
                 });
@@ -54,7 +57,7 @@ export const Dashboard = () => {
         return () => unsubscribe();
     }, [userId]);
 
-      useEffect(() => {
+    useEffect(() => {
         if (!userId || interviews.length === 0) return;
 
         async function fetchAnsweredCounts() {
@@ -71,6 +74,10 @@ export const Dashboard = () => {
                     answeredQuestionsSet.add(doc.data().question);
                 });
                 newAnsweredMap[interview.id] = answeredQuestionsSet.size;
+                console.log(
+                    `Answered count for interview ${interview.id}:`,
+                    answeredQuestionsSet.size
+                );
             }
             setAnsweredMap(newAnsweredMap);
         }
@@ -78,9 +85,71 @@ export const Dashboard = () => {
     }, [userId, interviews]);
 
 
+    useEffect(() => {
+        if (!userId || interviews.length === 0) return;
+
+        async function fetchFeedbackForInterviews() {
+            const feedbackMap = {};
+
+            for (const interview of interviews) {
+                console.log("Fetching feedback for interview:", interview.id);
+
+                const userAnswersQuery = query(
+                    collection(db, "userAnswers"),
+                    where("userId", "==", userId),
+                    where("mockIdRef", "==", interview.id)
+                );
+
+                const answersSnapshot = await getDocs(userAnswersQuery);
+                const answers = answersSnapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    ...doc.data(),
+                }));
+
+                console.log(`Answers fetched for interview ${interview.id}:`, answers);
+
+                const sectionFeedbackMap = {};
+
+                (interview.sections || []).forEach((section) => {
+
+                    const matchedFeedbacks = answers.filter((answer) =>
+                        section.questions.some(
+                            (q) =>
+                                q.question.toLowerCase().includes(answer.question.toLowerCase()) ||
+                                answer.question.toLowerCase().includes(q.question.toLowerCase())
+                        )
+                    );
+
+                    sectionFeedbackMap[section.type] = matchedFeedbacks;
+
+                    console.log(
+                        `Section '${section.type}' matched feedbacks for interview ${interview.id}:`,
+                        matchedFeedbacks
+                    );
+                });
+
+                feedbackMap[interview.id] = (interview.sections || []).map((section) => ({
+                    ...section,
+                    feedbacks: sectionFeedbackMap[section.type] || [],
+                }));
+
+            }
+
+            console.log("Final feedbackByInterview map:", feedbackMap);
+            setFeedbackByInterview(feedbackMap);
+        }
+
+        fetchFeedbackForInterviews();
+    }, [userId, interviews]);
+
     const handleInterviewDeleted = (deletedInterviewId) => {
         setInterviews((prev) => prev.filter((i) => i.id !== deletedInterviewId));
         setAnsweredMap((prev) => {
+            const copy = { ...prev };
+            delete copy[deletedInterviewId];
+            return copy;
+        });
+        setFeedbackByInterview((prev) => {
             const copy = { ...prev };
             delete copy[deletedInterviewId];
             return copy;
@@ -90,9 +159,10 @@ export const Dashboard = () => {
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-screen flex flex-col">
-
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-                <h1 className="text-3xl font-semibold text-gray-900 mb-4 sm:mb-0">Dashboard</h1>
+                <h1 className="text-3xl font-semibold text-gray-900 mb-4 sm:mb-0">
+                    Dashboard
+                </h1>
                 <Link to={"/generate/create"} className="inline-flex justify-center">
                     <Button size="sm" className="flex items-center gap-1">
                         <Plus className="w-4 h-4" /> Add New
@@ -102,14 +172,10 @@ export const Dashboard = () => {
 
             <Separator className="mb-8" />
 
-
             {loading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {Array.from({ length: 6 }).map((_, index) => (
-                        <Skeleton
-                            key={index}
-                            className="h-28 sm:h-36 rounded-md shadow-md"
-                        />
+                        <Skeleton key={index} className="h-28 sm:h-36 rounded-md shadow-md" />
                     ))}
                 </div>
             ) : interviews.length > 0 ? (
@@ -119,11 +185,14 @@ export const Dashboard = () => {
                         const answeredCount = answeredMap[interview.id] || 0;
                         const allAnswered = totalQuestions > 0 && answeredCount === totalQuestions;
 
+                        const feedbackBySection = feedbackByInterview[interview.id] || [];
+
                         return (
                             <InterviewPin
                                 key={interview.id}
                                 interview={interview}
                                 allAnswered={allAnswered}
+                                feedbackBySection={feedbackBySection}
                                 onDeleted={handleInterviewDeleted}
                             />
                         );
