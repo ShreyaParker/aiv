@@ -101,9 +101,28 @@ export const Feedback = () => {
           section.questions.some((q) => q.question === fb.question)
       );
 
+
+      const anyNoPersonDetected = sectionFeedbacks.some(
+          (fb) => fb.personDetectedDuringRecording === false
+      );
+
+
+      const suspiciousObjects = ["cell phone", "laptop"];
+      const flaggedObjects = new Set();
+
+      sectionFeedbacks.forEach((fb) => {
+        (fb.objectDetected || []).forEach((obj) => {
+          if (suspiciousObjects.includes(obj)) {
+            flaggedObjects.add(obj);
+          }
+        });
+      });
+
       return {
         ...section,
         feedbacks: sectionFeedbacks,
+        personFlag: anyNoPersonDetected,
+        suspiciousObjects: Array.from(flaggedObjects),
       };
     });
   }, [interview, feedbacks]);
@@ -126,7 +145,7 @@ export const Feedback = () => {
           </p>
         </header>
 
-         {interview && (
+        {interview && (
             <InterviewPin
                 interview={interview}
                 feedbackBySection={feedbackBySection}
@@ -144,6 +163,19 @@ export const Feedback = () => {
                   <section key={section.type}>
                     <h3 className="text-xl font-bold mb-4">{section.type} Section</h3>
 
+                    {(section.personFlag || section.suspiciousObjects.length > 0) && (
+                        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4 rounded-md text-sm text-red-800">
+                          <strong>Warning:</strong>
+                          <ul className="list-disc list-inside mt-2 space-y-1">
+                            {section.personFlag && (
+                                <li>No person was detected during at least one answer. Make sure you're visible during the interview.</li>
+                            )}
+                            {section.suspiciousObjects.map((obj, i) => (
+                                <li key={i}>{obj} was detected. Please avoid using external devices during recording.</li>
+                            ))}
+                          </ul>
+                        </div>
+                    )}
 
                     {section.feedbacks.length > 0 ? (
                         <Accordion type="single" collapsible className="space-y-6">

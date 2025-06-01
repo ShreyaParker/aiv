@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.jsx";
 import { cn } from "@/lib/utils.js";
 import { Volume2, VolumeX } from "lucide-react";
-import { RecordAnswer } from "@/components/record-answer.jsx";
+import { RecordAnswer } from "@/components/record-answer/record-answer.jsx";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 
